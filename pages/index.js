@@ -1,64 +1,92 @@
-import { useState } from "react";
-import Head from "next/head";
-import Image from "next/image";
-import styles from "../styles/Home.module.css";
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+import { useState, useEffect } from 'react';
+import SideMenu from '../components/sections/SideMenu.js'
+import ChatBox from '../components/sections/ChatBox'
 
 export default function Home() {
-  const [prediction, setPrediction] = useState(null);
-  const placeHold = "a photo of an owl, pencil drawing";
 
-  const handleSubmit = async (e) => {
+  useEffect(() => {
+    getEngines();
+  }, [])
+
+  const [chatInput, setChatInput] = useState("");
+  const [models, setModels] = useState([]);
+  const [temperature, setTemperature] = useState(0.5);
+  const [currentModel, setCurrentModel] = useState("text-davinci-003");
+  const [chatLog, setChatLog] = useState([{
+    user: "gpt",
+    message: "How can I help you today?"
+  }]);
+
+  // clear chats
+  function clearChat(){
+    setChatLog([]);
+  }
+
+  function getEngines(){
+    fetch("/api/models")
+    .then(res => res.json())
+    .then(data => {
+      // console.log(data.models.data)
+      // set models in order alpahbetically
+      data.models.data.sort((a, b) => {
+        if(a.id < b.id) { return -1; }
+        if(a.id > b.id) { return 1; }
+        return 0;
+      })
+      setModels(data.models.data)
+    })
+  }
+  
+  async function handleSubmit(e){
     e.preventDefault();
-    var prompt = e.target.prompt.value || placeHold;
-    const response = await fetch("/api/banana", {
+    let chatLogNew = [...chatLog, { user: "me", message: `${chatInput}`} ]
+    setChatInput("");
+    setChatLog(chatLogNew)
+    // fetch response to the api combining the chat log array of messages and seinding it as a message to localhost:3000 as a post
+    const messages = chatLogNew.map((message) => message.message).join("\n")
+    
+    const response = await fetch("/api/chat", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        prompt: prompt,
-      }),
-    });
-    let prediction = await response.json();
-    setPrediction(prediction);
-  };
+        message: messages,
+        currentModel,
+       })
+      });
+    const data = await response.json();
+    setChatLog([...chatLogNew, { user: "gpt", message: `${data.message}`} ])
+    var scrollToTheBottomChatLog = document.getElementsByClassName("chat-log")[0];
+    scrollToTheBottomChatLog.scrollTop = scrollToTheBottomChatLog.scrollHeight;
+  }
+
+  function handleTemp(temp) {
+    if(temp > 1){
+      setTemperature(1)
+    } else if (temp < 0){
+      setTemperature(0)
+    } else {
+      setTemperature(temp)
+    }
+
+  }
 
   return (
-    <div className={styles.container}>
-      <Head>
-        <title>Banana + VoltaML</title>
-      </Head>
-      <p>1.5 second Stable Diffusion - VoltaML + Banana </p>
-      <p>Enter a prompt to display an image: </p>
-      <form className={styles.form} onSubmit={handleSubmit}>
-        <input
-          type="text"
-          name="prompt"
-          placeholder={placeHold}
-        />
-        <button type="submit">Go!</button>
-      </form>
-      {prediction && (
-        <div>
-          <div className={styles.imageWrapper}>
-            <Image
-              fill
-              src={prediction}
-              alt="output"
-              sizes="100vw" />
-          </div>
-        </div>
-      )}
-      <p> Powered by:
-        <a target="_blank" href="https://banana.dev">
-          <Image
-            width="82"
-            height="20"
-            src="https://www.banana.dev/lib_zOkYpJoyYVcAamDf/x2p804nk9qvjb1vg.svg" />
-        </a>
-      </p>
+    <div className="App">
+      <SideMenu
+        currentModel={currentModel} 
+        setCurrentModel={setCurrentModel} 
+        models={models}
+        setTemperature={handleTemp}
+        temperature={temperature}
+        clearChat={clearChat}
+      />
+      <ChatBox 
+        chatInput={chatInput}
+        chatLog={chatLog} 
+        setChatInput={setChatInput} 
+        handleSubmit={handleSubmit} />
     </div>
   );
 }
